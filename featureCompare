@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>項目比較應用</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            text-align: center;
+        }
+        #input-section, #items-list, #buttons {
+            width: 100%;
+            max-width: 600px;
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            width: 70%;
+            padding: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .delete-btn {
+            background-color: #dc3545;
+            padding: 5px 10px;
+            font-size: 14px;
+            margin-left: 10px;
+        }
+        .delete-btn:hover {
+            background-color: #c82333;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+        li {
+            background: white;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #comparison-section {
+            display: none;
+            text-align: center;
+        }
+        #comparison-options button {
+            width: 80%;
+            margin: 10px 0;
+            font-size: 24px;
+            padding: 20px;
+        }
+        #qr-section, #scan-section {
+            display: none;
+            text-align: center;
+        }
+        #video {
+            width: 100%;
+            max-width: 400px;
+            border: 1px solid #ccc;
+        }
+        canvas {
+            display: none;
+        }
+        #result-section {
+            display: none;
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+            margin-top: 20px;
+        }
+        #result-section h2 {
+            color: #333;
+        }
+        #result-section ul {
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #result-section li {
+            font-size: 18px;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        #result-section li:last-child {
+            border-bottom: none;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"></script>
+</head>
+<body>
+    <h1>項目比較應用</h1>
+    
+    <div id="input-section">
+        <input type="text" id="item-input" placeholder="輸入項目">
+        <button onclick="addItem()">新增項目</button>
+    </div>
+    
+    <div id="items-list">
+        <h2>項目列表</h2>
+        <ul id="items-ul"></ul>
+    </div>
+    
+    <div id="buttons">
+        <button onclick="startComparison()">開始比較</button>
+        <button onclick="shareResults()">分享結果</button>
+        <button onclick="startScanForStats()">統計 (掃描結果)</button>
+        <button onclick="shareItems()">分享項目</button>
+        <button onclick="startScanForItems()">掃描項目</button>
+    </div>
+    
+    <div id="comparison-section">
+        <h2>比較: <span id="pair-a"></span> vs <span id="pair-b"></span></h2>
+        <div id="comparison-options"></div>
+        <p>剩餘比較: <span id="remaining"></span></p>
+    </div>
+    
+    <div id="qr-section">
+        <h2>QR Code</h2>
+        <div id="qrcode"></div>
+        <button onclick="closeQR()">關閉</button>
+    </div>
+    
+    <div id="scan-section">
+        <h2>掃描 QR Code</h2>
+        <video id="video" autoplay playsinline></video>
+        <canvas id="canvas"></canvas>
+        <button onclick="stopScan()">停止掃描</button>
+    </div>
+
+    <div id="result-section">
+        <h2>比較結果</h2>
+        <ul id="result-ul"></ul>
+        <button onclick="closeResults()">關閉結果</button>
+    </div>
+
+    <script>
+        let items = JSON.parse(localStorage.getItem('items')) || [];
+        let stats = JSON.parse(localStorage.getItem('stats')) || {};
+        let comparisons = [];
+        let currentComparisonIndex = 0;
+        let scanType = ''; // 'stats' or 'items'
+        let videoStream = null;
+
+        function updateItemsList() {
+            const ul = document.getElementById('items-ul');
+            ul.innerHTML = '';
+            items.forEach((item, index) => {
+                const li = document.createElement('li');
+                li.textContent = item;
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = '刪除';
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.onclick = () => deleteItem(index);
+                li.appendChild(deleteBtn);
+                ul.appendChild(li);
+            });
+            localStorage.setItem('items', JSON.stringify(items));
+        }
+
+        function addItem() {
+            const input = document.getElementById('item-input');
+            if (input.value.trim()) {
+                items.push(input.value.trim());
+                input.value = '';
+                updateItemsList();
+                resetStats();
+            }
+        }
+
+        function deleteItem(index) {
+            const item = items[index];
+            items.splice(index, 1);
+            delete stats[item];
+            localStorage.setItem('stats', JSON.stringify(stats));
+            updateItemsList();
+        }
+
+        function resetStats() {
+            stats = {};
+            items.forEach(item => {
+                stats[item] = stats[item] || 0;
+            });
+            localStorage.setItem('stats', JSON.stringify(stats));
+        }
+
+        function generateComparisons() {
+            comparisons = [];
+            for (let i = 0; i < items.length; i++) {
+                for (let j = i + 1; j < items.length; j++) {
+                    comparisons.push([items[i], items[j]]);
+                }
+            }
+            currentComparisonIndex = 0;
+        }
+
+        function startComparison() {
+            if (items.length < 2) {
+                alert('至少需要兩個項目才能比較');
+                return;
+            }
+            generateComparisons();
+            resetStats();
+            showNextComparison();
+            document.getElementById('comparison-section').style.display = 'block';
+            document.getElementById('input-section').style.display = 'none';
+            document.getElementById('items-list').style.display = 'none';
+            document.getElementById('buttons').style.display = 'none';
+            document.getElementById('result-section').style.display = 'none';
+        }
+
+        function showNextComparison() {
+            if (currentComparisonIndex >= comparisons.length) {
+                document.getElementById('comparison-section').style.display = 'none';
+                document.getElementById('input-section').style.display = 'block';
+                document.getElementById('items-list').style.display = 'block';
+                document.getElementById('buttons').style.display = 'block';
+                showResults();
+                return;
+            }
+            const pair = comparisons[currentComparisonIndex];
+            document.getElementById('pair-a').textContent = pair[0];
+            document.getElementById('pair-b').textContent = pair[1];
+            const optionsDiv = document.getElementById('comparison-options');
+            optionsDiv.innerHTML = '';
+            const btnA = document.createElement('button');
+            btnA.textContent = pair[0];
+            btnA.onclick = () => selectWinner(pair[0]);
+            optionsDiv.appendChild(btnA);
+            const btnB = document.createElement('button');
+            btnB.textContent = pair[1];
+            btnB.onclick = () => selectWinner(pair[1]);
+            optionsDiv.appendChild(btnB);
+            document.getElementById('remaining').textContent = comparisons.length - currentComparisonIndex;
+        }
+
+        function selectWinner(winner) {
+            stats[winner]++;
+            localStorage.setItem('stats', JSON.stringify(stats));
+            currentComparisonIndex++;
+            showNextComparison();
+        }
+
+        function shareResults() {
+            showQR(JSON.stringify(stats), '結果');
+        }
+
+        function shareItems() {
+            showQR(JSON.stringify(items), '項目');
+        }
+
+        function showQR(data, title) {
+            document.getElementById('qr-section').style.display = 'block';
+            const qrDiv = document.getElementById('qrcode');
+            qrDiv.innerHTML = '';
+            new QRCode(qrDiv, {
+                text: data,
+                width: 256,
+                height: 256
+            });
+            document.querySelector('#qr-section h2').textContent = title + ' QR Code';
+        }
+
+        function closeQR() {
+            document.getElementById('qr-section').style.display = 'none';
+        }
+
+        function startScanForStats() {
+            scanType = 'stats';
+            startScan();
+        }
+
+        function startScanForItems() {
+            scanType = 'items';
+            startScan();
+        }
+
+        function startScan() {
+            document.getElementById('scan-section').style.display = 'block';
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const context = canvas.getContext('2d');
+
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+                .then(stream => {
+                    videoStream = stream;
+                    video.srcObject = stream;
+                    video.play();
+                    requestAnimationFrame(tick);
+                })
+                .catch(err => {
+                    console.error('Error accessing camera:', err);
+                    alert('無法evano存取相機');
+                });
+
+            function tick() {
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                    canvas.height = video.videoHeight;
+                    canvas.width = video.videoWidth;
+                    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height);
+                    if (code) {
+                        processScannedData(code.data);
+                        stopScan();
+                        return;
+                    }
+                }
+                requestAnimationFrame(tick);
+            }
+        }
+
+        function stopScan() {
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+            }
+            document.getElementById('scan-section').style.display = 'none';
+        }
+
+        function processScannedData(data) {
+            try {
+                const parsed = JSON.parse(data);
+                if (scanType === 'stats') {
+                    for (let key in parsed) {
+                        if (stats[key] !== undefined) {
+                            stats[key] += parsed[key];
+                        } else {
+                            stats[key] = parsed[key];
+                        }
+                    }
+                    localStorage.setItem('stats', JSON.stringify(stats));
+                    alert('統計已更新！');
+                    showResults(); // 顯示掃描後的結果
+                } else if (scanType === 'items') {
+                    items = parsed;
+                    updateItemsList();
+                    resetStats();
+                    alert('項目已載入！');
+                }
+            } catch (e) {
+                alert('無效的 QR Code');
+            }
+        }
+
+        function showResults() {
+            const resultSection = document.getElementById('result-section');
+            const resultUl = document.getElementById('result-ul');
+            resultUl.innerHTML = '';
+            for (let item in stats) {
+                const li = document.createElement('li');
+                li.textContent = `${item}: ${stats[item]}`;
+                resultUl.appendChild(li);
+            }
+            resultSection.style.display = 'block';
+        }
+
+        function closeResults() {
+            document.getElementById('result-section').style.display = 'none';
+        }
+
+        // 初始化
+        updateItemsList();
+        resetStats();
+    </script>
+</body>
+</html>
