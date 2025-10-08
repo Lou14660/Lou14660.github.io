@@ -16,18 +16,22 @@
             flex-direction: column;
             align-items: center;
         }
+
         h1 {
             text-align: center;
         }
+
         #input-section, #items-list, #buttons {
             width: 100%;
             max-width: 600px;
             margin-bottom: 20px;
         }
+
         input[type="text"] {
-            width: 70%;
+            width: 80%;
             padding: 10px;
         }
+
         button {
             padding: 10px 20px;
             margin: 5px;
@@ -37,22 +41,27 @@
             border-radius: 5px;
             cursor: pointer;
         }
-        button:hover {
-            background-color: #0056b3;
-        }
+
+            button:hover {
+                background-color: #0056b3;
+            }
+
         .delete-btn {
             background-color: #dc3545;
             padding: 5px 10px;
             font-size: 14px;
             margin-left: 10px;
         }
-        .delete-btn:hover {
-            background-color: #c82333;
-        }
+
+            .delete-btn:hover {
+                background-color: #c82333;
+            }
+
         ul {
             list-style: none;
             padding: 0;
         }
+
         li {
             background: white;
             padding: 10px;
@@ -63,28 +72,34 @@
             justify-content: space-between;
             align-items: center;
         }
+
         #comparison-section {
             display: none;
             text-align: center;
         }
+
         #comparison-options button {
             width: 80%;
             margin: 10px 0;
             font-size: 24px;
             padding: 20px;
         }
+
         #qr-section, #scan-section {
             display: none;
             text-align: center;
         }
+
         #video {
             width: 100%;
             max-width: 400px;
             border: 1px solid #ccc;
         }
+
         canvas {
             display: none;
         }
+
         #result-section {
             display: none;
             width: 100%;
@@ -92,60 +107,65 @@
             text-align: center;
             margin-top: 20px;
         }
-        #result-section h2 {
-            color: #333;
-        }
-        #result-section ul {
-            background: white;
-            padding: 15px;
-            border-radius: 5px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        #result-section li {
-            font-size: 18px;
-            padding: 10px;
-            border-bottom: 1px solid #eee;
-        }
-        #result-section li:last-child {
-            border-bottom: none;
-        }
-    </style>
+
+            #result-section h2 {
+                color: #333;
+            }
+
+            #result-section ul {
+                background: white;
+                padding: 15px;
+                border-radius: 5px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+
+            #result-section li {
+                font-size: 18px;
+                padding: 10px;
+                border-bottom: 1px solid #eee;
+            }
+
+                #result-section li:last-child {
+                    border-bottom: none;
+                }
+    </style>    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"></script>
 </head>
 <body>
     <h1>項目比較應用</h1>
-    
+
     <div id="input-section">
         <input type="text" id="item-input" placeholder="輸入項目">
         <button onclick="addItem()">新增項目</button>
+        <button onclick="startScanForItems()">掃描項目</button>
     </div>
-    
+
     <div id="items-list">
         <h2>項目列表</h2>
         <ul id="items-ul"></ul>
     </div>
-    
+
     <div id="buttons">
         <button onclick="startComparison()">開始比較</button>
-        <button onclick="shareResults()">分享結果</button>
         <button onclick="startScanForStats()">統計 (掃描結果)</button>
+        
         <button onclick="shareItems()">分享項目</button>
-        <button onclick="startScanForItems()">掃描項目</button>
+        <button onclick="shareResults()">分享結果</button>
     </div>
-    
+
     <div id="comparison-section">
         <h2>比較: <span id="pair-a"></span> vs <span id="pair-b"></span></h2>
         <div id="comparison-options"></div>
         <p>剩餘比較: <span id="remaining"></span></p>
     </div>
-    
+
     <div id="qr-section">
         <h2>QR Code</h2>
         <div id="qrcode"></div>
         <button onclick="closeQR()">關閉</button>
     </div>
-    
+
     <div id="scan-section">
         <h2>掃描 QR Code</h2>
         <video id="video" autoplay playsinline></video>
@@ -166,6 +186,7 @@
         let currentComparisonIndex = 0;
         let scanType = ''; // 'stats' or 'items'
         let videoStream = null;
+
 
         function updateItemsList() {
             const ul = document.getElementById('items-ul');
@@ -273,17 +294,20 @@
         function shareItems() {
             showQR(JSON.stringify(items), '項目');
         }
-
+      
         function showQR(data, title) {
             document.getElementById('qr-section').style.display = 'block';
             const qrDiv = document.getElementById('qrcode');
             qrDiv.innerHTML = '';
+            // 使用 Base64 編碼來處理中文
+            const encodedData = btoa(unescape(encodeURIComponent(data)));
             new QRCode(qrDiv, {
-                text: data,
+                text: encodedData,
                 width: 256,
                 height: 256
             });
             document.querySelector('#qr-section h2').textContent = title + ' QR Code';
+
         }
 
         function closeQR() {
@@ -344,7 +368,8 @@
 
         function processScannedData(data) {
             try {
-                const parsed = JSON.parse(data);
+                const decodedData = decodeURIComponent(escape(atob(data)));
+                const parsed = JSON.parse(decodedData);                
                 if (scanType === 'stats') {
                     for (let key in parsed) {
                         if (stats[key] !== undefined) {
