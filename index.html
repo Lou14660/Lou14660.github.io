@@ -195,6 +195,27 @@
         let scanType = ''; // 'stats' or 'items'
         let videoStream = null;
 
+        // 頁面載入時檢查 URL 參數（只處理項目分享）
+        window.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const itemsParam = urlParams.get('items');
+            
+            if (itemsParam) {
+                try {
+                    const decodedData = decodeURIComponent(atob(itemsParam));
+                    const parsedItems = JSON.parse(decodedData);
+                    items = parsedItems;
+                    localStorage.setItem('items', JSON.stringify(items));
+                    updateItemsList();
+                    resetStats();
+                    alert('已成功載入分享的項目！');
+                    // 清除 URL 參數
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } catch (e) {
+                    console.error('載入項目失敗:', e);
+                }
+            }
+        });
 
         function updateItemsList() {
             const ul = document.getElementById('items-ul');
@@ -296,26 +317,29 @@
         }
 
         function shareResults() {
-            showQR(JSON.stringify(stats), '結果');
+            // 分享結果只傳輸數據，供掃描統計使用
+            const encodedStats = btoa(encodeURIComponent(JSON.stringify(stats)));
+            showQR(encodedStats, '分享統計結果');
         }
 
         function shareItems() {
-            showQR(JSON.stringify(items), '項目');
+            // 分享項目包含完整 URL，讓新用戶可以直接開啟
+            const encodedItems = btoa(encodeURIComponent(JSON.stringify(items)));
+            const currentUrl = window.location.origin + window.location.pathname;
+            const shareUrl = `${currentUrl}?items=${encodedItems}`;
+            showQR(shareUrl, '分享項目');
         }
       
         function showQR(data, title) {
             document.getElementById('qr-section').style.display = 'block';
             const qrDiv = document.getElementById('qrcode');
             qrDiv.innerHTML = '';
-            // 使用 Base64 編碼來處理中文
-            const encodedData = btoa(unescape(encodeURIComponent(data)));
             new QRCode(qrDiv, {
-                text: encodedData,
+                text: data,
                 width: 256,
                 height: 256
             });
             document.querySelector('#qr-section h2').textContent = title + ' QR Code';
-
         }
 
         function closeQR() {
@@ -347,7 +371,7 @@
                 })
                 .catch(err => {
                     console.error('Error accessing camera:', err);
-                    alert('無法evano存取相機');
+                    alert('無法存取相機');
                 });
 
             function tick() {
@@ -376,9 +400,19 @@
 
         function processScannedData(data) {
             try {
-                const decodedData = decodeURIComponent(escape(atob(data)));
-                const parsed = JSON.parse(decodedData);                
+                // 檢查是否為 URL（只有分享項目會是 URL）
+                if (data.startsWith('http://') || data.startsWith('https://')) {
+                    // 如果是 URL，直接跳轉
+                    window.location.href = data;
+                    return;
+                }
+                
+                // 如果不是 URL，則是 Base64 編碼的數據
+                const decodedData = decodeURIComponent(atob(data));
+                const parsed = JSON.parse(decodedData);
+                
                 if (scanType === 'stats') {
+                    // 統計掃描：累加數據
                     for (let key in parsed) {
                         if (stats[key] !== undefined) {
                             stats[key] += parsed[key];
@@ -388,8 +422,9 @@
                     }
                     localStorage.setItem('stats', JSON.stringify(stats));
                     alert('統計已更新！');
-                    showResults(); // 顯示掃描後的結果
+                    showResults();
                 } else if (scanType === 'items') {
+                    // 項目掃描：替換項目列表（向後兼容舊版本）
                     items = parsed;
                     updateItemsList();
                     resetStats();
